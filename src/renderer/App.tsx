@@ -62,14 +62,20 @@ function Sidebar() {
       <div className="p-4 border-t border-gray-800 flex flex-col gap-4">
         <div className="flex items-center justify-between px-2">
            <span className="text-xs text-gray-400 font-medium">{language === 'ar' ? 'اللغة' : 'Language'}</span>
-           <select 
-             value={language} 
-             onChange={(e) => updateSettings({ language: e.target.value as 'en' | 'ar' })}
-             className="bg-gray-800 text-xs text-gray-300 rounded px-2 py-1 outline-none border border-gray-700 focus:border-blue-500 cursor-pointer"
-           >
-             <option value="en">English</option>
-             <option value="ar">العربية</option>
-           </select>
+           <div className="flex bg-gray-800 rounded-lg p-0.5 border border-gray-700">
+              <button 
+                onClick={() => updateSettings({ language: 'en' })}
+                className={`px-2 py-1 rounded-md font-medium text-xs transition-colors ${language === 'en' ? 'bg-blue-600/20 text-blue-500' : 'text-gray-400 hover:text-gray-200'}`}
+              >
+                ENG
+              </button>
+              <button 
+                onClick={() => updateSettings({ language: 'ar' })}
+                className={`px-2 py-1 rounded-md font-medium text-xs transition-colors ${language === 'ar' ? 'bg-blue-600/20 text-blue-500' : 'text-gray-400 hover:text-gray-200'}`}
+              >
+                AR
+              </button>
+           </div>
         </div>
         <div className="flex items-center gap-3 px-3 py-2 bg-gray-800/30 rounded-xl hover:bg-gray-800/50 transition-colors group cursor-pointer" onClick={logout} title={language === 'ar' ? 'تسجيل الخروج' : 'Click to logout'}>
           {currentUser?.avatarUrl ? (

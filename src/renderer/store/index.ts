@@ -65,16 +65,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 }));
 
 interface ChatState {
-  messages: { role: string; text: string }[];
+  messages: { id: string; role: 'user' | 'assistant'; text: string; timestamp?: string }[];
   isTyping: boolean;
-  addMessage: (msg: { role: string; text: string }) => void;
+  addMessage: (msg: { id: string; role: 'user' | 'assistant'; text: string }) => void;
   setTyping: (status: boolean) => void;
+  clearMessages: () => void;
+  loadSession: (sessionId: string) => Promise<void>;
 }
-export const useChatStore = create<ChatState>((set) => ({
+
+export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isTyping: false,
-  addMessage: (msg) => set((state) => ({ messages: [...state.messages, msg] })),
-  setTyping: (status) => set({ isTyping: status })
+  addMessage: (msg) => set((state) => ({ 
+    messages: [...state.messages, { ...msg, timestamp: new Date().toISOString() }] 
+  })),
+  setTyping: (status) => set({ isTyping: status }),
+  clearMessages: () => set({ messages: [] }),
+  loadSession: async (sessionId) => {
+    const session = await window.api?.loadSession?.(sessionId);
+    if (session?.messages) {
+      set({ messages: session.messages });
+    }
+  }
 }));
 
 export interface Session {
@@ -88,6 +100,7 @@ export interface Session {
 // Sessions Store
 interface SessionsState {
   sessions: Session[];
+  activeSession?: string;
   setSessions: (sessions: Session[]) => void;
   addSession: (session: Session) => void;
   deleteSession: (id: string) => void;
@@ -100,10 +113,12 @@ export const useSessionsStore = create<SessionsState>((set) => ({
     { id: '3', title: 'Bug Analysis #442', time: 'Yesterday', active: false, count: 24 },
     { id: '4', title: 'Travel Planning', time: '3 days ago', active: false, count: 8 },
   ],
+  activeSession: '1',
   setSessions: (sessions) => set({ sessions }),
   addSession: (session) => set((state) => ({ sessions: [session, ...state.sessions] })),
   deleteSession: (id) => set((state) => ({ sessions: state.sessions.filter(s => s.id !== id) })),
   setActiveSession: (id) => set((state) => ({
+    activeSession: id,
     sessions: state.sessions.map(s => ({ ...s, active: s.id === id }))
   }))
 }));

@@ -2,24 +2,27 @@ import { useEffect, useState, useRef } from 'react';
 import { Send, Bot, User, Copy, Paperclip, Mic, X, Search, Pin, ChevronDown, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
-import { useProfilesStore, useSettingsStore } from '../store';
+import { useProfilesStore, useSettingsStore, useChatStore, useSessionsStore } from '../store';
 
 export default function ChatScreen() {
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<{id: string, role: 'user'|'assistant', text: string, isPinned?: boolean}[]>([
-    { id: '1', role: 'assistant', text: "I've analyzed the logs from the last 24 hours. Here are the key findings:\n\n- **Efficiency**: Up by 12%\n- **Latency**: Average 450ms\n- **Token usage**: Within limits\n\n```json\n{\n  \"status\": \"optimized\",\n  \"agents_active\": 12\n}\n```" }
-  ]);
-  const [isTyping, setIsTyping] = useState(false);
+  const { messages, addMessage, isTyping, setTyping, clearMessages } = useChatStore();
+  const { activeSession } = useSessionsStore();
+  
   const [isListening, setIsListening] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showPinned, setShowPinned] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
+  
+  // Local state for pinned messages (since it's not in ChatStore UI requirements explicitly)
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+  
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
 
   const { profiles, activeProfile } = useProfilesStore();
-  const currentProfile = profiles.find(p => p.id === activeProfile) || { name: 'ZOOM', initials: 'Z' };
+  const currentProfile = profiles.find(p => p.id === activeProfile) || { name: 'ZOOM', initials: 'Z', color: 'bg-blue-600', avatarUrl: undefined };
   const { language } = useSettingsStore();
 
   useEffect(() => {
@@ -78,29 +81,43 @@ export default function ChatScreen() {
   };
 
   useEffect(() => {
-    // Mock the Electron API
-    const handleToken = (e: any) => {
-      setMessages(prev => {
-        const newMsgs = [...prev];
+    const handleToken = (e: any, data: any) => {
+      const token = typeof data === 'string' ? data : data.token;
+      
+      useChatStore.setState((state) => {
+        const newMsgs = [...state.messages];
         const last = newMsgs[newMsgs.length - 1];
+        
         if (last && last.role === 'assistant') {
-          last.text += typeof e.detail === 'string' ? e.detail : e.detail.token;
+          // modify last message in place to avoid full array recreation
+          last.text += token;
         } else {
-          newMsgs.push({ id: Date.now().toString(), role: 'assistant', text: typeof e.detail === 'string' ? e.detail : e.detail.token });
+          newMsgs.push({ 
+            id: Date.now().toString(), 
+            role: 'assistant', 
+            text: token 
+          });
         }
-        return newMsgs;
+        
+        return { messages: newMsgs };
       });
     };
-    const handleEnd = () => setIsTyping(false);
+    
+    const handleEnd = () => setTyping(false);
+    
+    const handleError = (e: any, error: string) => {
+      setTyping(false);
+      // Optional: show error message
+    };
 
-    window.addEventListener('mock-chat', handleToken);
     window.api?.onChatToken?.(handleToken);
     window.api?.onChatEnd?.(handleEnd);
+    window.api?.onChatError?.(handleError);
 
     return () => {
-      window.removeEventListener('mock-chat', handleToken);
       window.api?.removeAllListeners?.('zoom:chat-token');
       window.api?.removeAllListeners?.('zoom:chat-end');
+      window.api?.removeAllListeners?.('zoom:chat-error');
     };
   }, []);
 
@@ -119,16 +136,19 @@ export default function ChatScreen() {
     }
     
     setInput('');
-    setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', text: msgText.trim() }]);
-    setIsTyping(true);
+    const id = Date.now().toString();
+    addMessage({ id, role: 'user', text: msgText.trim() });
+    setTyping(true);
     setFiles([]); // Clear files
-    window.api?.chat?.(msgText.trim());
+    
+    window.api?.chat?.(msgText.trim(), activeSession);
   };
 
   const handleNewChat = () => {
-    setMessages([]);
+    clearMessages();
     setInput('');
     setFiles([]);
+    setPinnedIds(new Set());
   };
 
   const handleCopy = (text: string) => {
@@ -159,14 +179,19 @@ export default function ChatScreen() {
   };
 
   const togglePin = (id: string) => {
-    setMessages(prev => prev.map(m => m.id === id ? { ...m, isPinned: !m.isPinned } : m));
+    setPinnedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const filteredMessages = messages.filter(m => 
     searchQuery === '' ? true : m.text.toLowerCase().includes(searchQuery.toLowerCase())
   );
   
-  const pinnedMessages = messages.filter(m => m.isPinned);
+  const pinnedMessages = messages.filter(m => pinnedIds.has(m.id));
 
   return (
     <div 
@@ -274,10 +299,10 @@ export default function ChatScreen() {
               <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex gap-1 z-10 transition-opacity">
                 <button 
                   onClick={() => togglePin(m.id)}
-                  className={`p-1.5 rounded transition-all ${m.isPinned ? 'text-blue-400 bg-gray-800/80 shadow-sm' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
-                  title={m.isPinned ? "Unpin message" : "Pin message"}
+                  className={`p-1.5 rounded transition-all ${pinnedIds.has(m.id) ? 'text-blue-400 bg-gray-800/80 shadow-sm' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
+                  title={pinnedIds.has(m.id) ? "Unpin message" : "Pin message"}
                 >
-                  <Pin size={14} className={m.isPinned ? "fill-blue-400" : ""} />
+                  <Pin size={14} className={pinnedIds.has(m.id) ? "fill-blue-400" : ""} />
                 </button>
                 <button 
                   onClick={() => handleCopy(m.text)}
