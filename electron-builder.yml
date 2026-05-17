@@ -1,0 +1,31 @@
+appId: com.zoom.agent
+productName: ZOOM
+directories:
+  output: dist
+  buildResources: build
+files:
+  - dist/main/**/*
+  - dist/preload/**/*
+  - dist/renderer/**/*
+extraFiles:
+  - filter:
+      - "README.md"
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  category: public.app-category.productivity
+linux:
+  target:
+    - AppImage
+    - deb
+  maintainer: amr.h66@gmail.com
+win:
+  target:
+    - nsis
